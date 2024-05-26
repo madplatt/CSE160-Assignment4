@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title>Max's Blocky World</title>
+    </head>
+
+    <body onload="main()">
+        <div class="intro">
+            <b>Max Platt</b> <br>
+            <b>madplatt@ucsc.edu</b> <br> <br>
+            <b>Notes to Grader: Click canvas for mouse capture/control, uses MDN pointer lock API, may not function on Safari. </b> <br> <br>
+            <b>Try to find the hidden diamonds inside the maze ruins! Toggle on cheats to enable vertical movement and <br> block 
+                breaking/placement within the maze. Click to break/place blocks with cheats enabled. <br> <br>
+            </b>
+        </div>
+        <canvas id="webgl" width="800" height="800">
+            Please use the browser supporting "canvas".
+        </canvas>
+        <br> <br>
+        <input type="button" id="toggleButton" value="Toggle Cheats" size="20" />
+        <br>
+        <script src="../lib/webgl-utils.js"></script>
+        <script src="../lib/webgl-debug.js"></script>
+        <script src="../lib/cuon-utils.js"></script>
+        <script src="../lib/cuon-matrix-cse160.js"></script>
+        <script src="BlockWorld.js"></script>
+        <script src="Cube.js"></script>
+        <script src="Camera.js"></script>
+
+    </body>
+</html>

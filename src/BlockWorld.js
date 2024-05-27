@@ -3,13 +3,18 @@
 var VSHADER_SOURCE = `
     attribute vec4 a_Position;
     attribute vec2 a_UV;
+    attribute vec3 a_Normal;
     varying vec2 v_UV;
+    varying vec3 v_Normal;
+    varying vec4 v_VertexPos;
     uniform mat4 u_ModelMatrix; 
     uniform mat4 u_ProjectionMatrix; 
     uniform mat4 u_ViewMatrix; 
     void main() {
       gl_Position = u_ProjectionMatrix * u_ViewMatrix* u_ModelMatrix * a_Position;
       v_UV = a_UV;
+      v_Normal = a_Normal;
+      v_VertexPos = u_ModelMatrix * a_Position;
     }`
 
 // Fragment shader program
@@ -19,10 +24,20 @@ var FSHADER_SOURCE = `
     uniform sampler2D u_Sampler0;
     uniform sampler2D u_Sampler1;
     uniform sampler2D u_Sampler2;
+    uniform vec3 u_LightPos;
+    uniform vec3 u_CameraPos;
     uniform int u_TexSelect;
+    uniform int u_NormalMode;
+    uniform int u_LightsOn;
+    uniform vec3 u_LightRGB;
     varying vec2 v_UV;
+    varying vec3 v_Normal;
+    varying vec4 v_VertexPos;
     void main() {
-      if (u_TexSelect == -2) {
+      if (u_NormalMode == 1) {
+        gl_FragColor = vec4((v_Normal + 1.0) / 2.0,1.0);
+      }
+      else if (u_TexSelect == -2) {
         gl_FragColor = u_FragColor;
       }
       else if (u_TexSelect == -1) {
@@ -37,6 +52,31 @@ var FSHADER_SOURCE = `
       else if (u_TexSelect == 2) {
         gl_FragColor = texture2D(u_Sampler2, v_UV);
       }
+      
+      
+      if (u_LightsOn == 1 && u_TexSelect != -2)
+      {
+        vec3 lightVec = u_LightPos - vec3(v_VertexPos);
+
+        // Diffuse Light Value
+        vec3 L = normalize(lightVec);
+        vec3 N = normalize(v_Normal);
+        float nDotL = max(dot(L,N), 0.0);
+  
+        // Reflection
+        vec3 R = reflect(-L, N);
+  
+        // Eye
+        vec3 E = normalize(u_CameraPos - vec3(v_VertexPos));
+  
+        // Specular Light Calc
+        float specular = pow(max(dot(E, R), 0.0), 30.0);
+        
+        vec3 diffuse = (u_LightRGB * 0.5 + vec3(gl_FragColor) * 0.5) * nDotL * 0.5;
+        vec3 ambient = vec3(gl_FragColor) * 0.5;
+        gl_FragColor = vec4(specular + diffuse + ambient, 1.0);
+      }
+      
     }`
 
 
@@ -47,23 +87,30 @@ let gl;
 let u_TexSelect;
 let a_Position;
 let a_UV;
+let a_Normal;
 let u_FragColor;
 let u_Sampler0, u_Sampler1, u_Sampler2;
 let u_ModelMatrix;
+let u_LightPos, u_CameraPos;
+let u_NormalMode, u_LightsOn;
 
-let g_camera;
+let g_camera, g_light;
 var g_texImage1, g_texImage2;
 var g_objList = [];
 var g_globalAngleX = 0;
 var g_globalAngleY = 0;
 var g_animDisabled = false;
+var g_lightsEnabled = false;
+var g_normsEnabled = false;
 var g_startTime = performance.now()/1000.0;
 var g_secondsPassed = performance.now()/1000.0 - g_startTime;
 var g_fps;
 var g_oldFrameCount = 0, g_frameCount = 0;
 var g_map;
 var g_loadedTexture = null;
-var g_cheatsEnabled = false;
+var g_cheatsEnabled = true;
+var g_lightX = 20, g_lightY = 45, g_lightZ = 10;
+var g_diffRed = 1.0, g_diffGreen = 1.0, g_diffBlue = 1.0;
 
 function main() {
     setupWebGL();
@@ -94,11 +141,12 @@ function main() {
     var hwmatrix = new Matrix4();
     hwmatrix.setLookAt(0,0,2, 0,0,0, 0,1,0);
     console.log(hwmatrix.elements);
+
     requestAnimationFrame(tick);
 }
 
 function createWorld()
-{
+{   
     var mazeArray = 
     [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
     1,1,1,1,1,1,1,1,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
@@ -132,6 +180,41 @@ function createWorld()
     1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,
     1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
     1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1]
+    /*
+    var mazeArray =
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,]
+    */
     //console.log("" + mazeArray);
     var xLen = 32;
     var yLen = 4;
@@ -153,7 +236,7 @@ function createWorld()
                 var mazeVal = mazeArray[i * 32 + k];
                 if (mazeVal == 1)
                 {
-                    var cube = new Cube(mazeVal);
+                    var cube = new Cube(1);
                     cube.matrix.setTranslate(i,j,k);
                     if (j == 0)
                     { 
@@ -186,17 +269,34 @@ function createWorld()
         }
     }
     
+    var sphere = new Sphere(1);
+    sphere.color = [0.0, 0.8, 1.0, 1.0];
+    sphere.matrix.setTranslate(10,20,20);
+    sphere.matrix.scale(4,4,4);
+    g_objList.push(sphere);
 
     cube = new Cube(-2);
     cube.color = [0.0, 0.8, 1.0, 1.0];
-    cube.matrix.setTranslate(-40,-40,-40);
-    cube.matrix.scale(250,250,250);
+    cube.matrix.setTranslate(-250,-250,-250);
+    cube.matrix.scale(500, 500, 500);
+    console.log(cube.normal);
+    cube.invertNormals();
+    console.log(cube.normal);
     g_objList.push(cube);
 
     cube = new Cube(0);
     cube.matrix.setTranslate(-100,-.1,-100);
     cube.matrix.scale(150,.1,150);
     g_objList.push(cube);
+
+
+    gl.uniform3f(u_LightPos, g_lightX, g_lightY, g_lightZ);
+    g_light = new Cube(-2);
+    g_light.color = [2,2,0,1];
+    g_light.matrix.setTranslate(g_lightX, g_lightY, g_lightZ);
+    g_light.matrix.scale(.5,.5,.5);
+    g_objList.push(g_light);
+
 }
 
 let sec = 0;
@@ -293,6 +393,12 @@ function connectVariablesToGLSL() {
         return;
     }
 
+    a_Normal = gl.getAttribLocation(gl.program, 'a_Normal');
+    if (a_UV < 0) {
+        console.log('Failed to get the storage location of a_Normal');
+        return;
+    }
+
     u_TexSelect = gl.getUniformLocation(gl.program, 'u_TexSelect');
     if (!u_TexSelect) {
         console.log('Failed to get the storage location of u_TexSelect');
@@ -341,15 +447,142 @@ function connectVariablesToGLSL() {
         console.log('Failed to get storage location of u_Sampler2');
         return false;
     }
+
+    u_LightPos = gl.getUniformLocation(gl.program, 'u_LightPos');
+    if (!u_LightPos) 
+    {
+        console.log('Failed to get storage location of u_LightPos');
+        return false;
+    }
+
+    u_LightsOn = gl.getUniformLocation(gl.program, 'u_LightsOn');
+    if (!u_LightsOn) 
+    {
+        console.log('Failed to get storage location of u_LightsOn');
+        return false;
+    }
+    gl.uniform1i(u_LightsOn, 0);
+
+    u_NormalMode = gl.getUniformLocation(gl.program, 'u_NormalMode');
+    if (!u_NormalMode) 
+    {
+        console.log('Failed to get storage location of u_NormalMode');
+        return false;
+    }
+    gl.uniform1i(u_NormalMode, 0);
+
+    
+    u_LightRGB = gl.getUniformLocation(gl.program, 'u_LightRGB');
+    if (!u_LightRGB) 
+    {
+        console.log('Failed to get storage location of u_LightRGB');
+        return false;
+    }
+    gl.uniform3f(u_LightRGB, Number(g_diffRed), Number(g_diffGreen), Number(g_diffBlue));
+
+
+    u_CameraPos = gl.getUniformLocation(gl.program, 'u_CameraPos');
+    if (!u_CameraPos) 
+    {
+        console.log('Failed to get storage location of u_CameraPos');
+        return false;
+    }
 }
 
 function setupHTMLElements() {
-    const toggleButton = document.getElementById("toggleButton");
-    if (!toggleButton) {
-        console.log('Failed to retrieve the toggleButton element');
+    const toggleCheats = document.getElementById("toggleCheats");
+    if (!toggleCheats) {
+        console.log('Failed to retrieve the toggleCheats element');
         return;
     }
-    toggleButton.addEventListener("click", function() {g_cheatsEnabled = !(g_cheatsEnabled); });
+    toggleCheats.addEventListener("click", function() {g_cheatsEnabled = !(g_cheatsEnabled); });
+
+    const toggleLights = document.getElementById("toggleLights");
+    if (!toggleLights) {
+        console.log('Failed to retrieve the toggleLights element');
+        return;
+    }
+    toggleLights.addEventListener("click", function() {
+        if(g_lightsEnabled) {
+            gl.uniform1i(u_LightsOn, 0);
+            g_lightsEnabled = false;
+        }
+        else
+        {
+            gl.uniform1i(u_LightsOn, 1);
+            g_lightsEnabled = true;
+        }
+    });
+
+
+    const toggleNorms = document.getElementById("toggleNorms");
+    if (!toggleNorms) {
+        console.log('Failed to retrieve the toggleNorms element');
+        return;
+    }
+    toggleNorms.addEventListener("click", function() {
+        if(g_normsEnabled) {
+            gl.uniform1i(u_NormalMode, 0);
+            g_normsEnabled = false;
+        }
+        else
+        {
+            gl.uniform1i(u_NormalMode, 1);
+            g_normsEnabled = true;
+        }
+    });
+
+
+    const lightXSlider = document.getElementById("lightXSlider");
+    if (!lightXSlider) {
+        console.log('Failed to retrieve the lightXSlider element');
+        return;
+    }
+    lightXSlider.addEventListener("mousemove", function() {g_lightX = this.value; });
+
+    const lightYSlider = document.getElementById("lightYSlider");
+    if (!lightYSlider) {
+        console.log('Failed to retrieve the lightYSlider element');
+        return;
+    }
+    lightYSlider.addEventListener("mousemove", function() {g_lightY = this.value; });
+
+    const lightZSlider = document.getElementById("lightZSlider");
+    if (!lightZSlider) {
+        console.log('Failed to retrieve the lightZSlider element');
+        return;
+    }
+    lightZSlider.addEventListener("mousemove", function() {g_lightZ = this.value; });
+
+    const diffBlueSlider = document.getElementById("diffBlueSlider");
+    if (!diffBlueSlider) {
+        console.log('Failed to retrieve the diffBlueSlider element');
+        return;
+    }
+    diffBlueSlider.addEventListener("mousemove", function() {
+        g_diffBlue = Number(this.value);  
+        gl.uniform3f(u_LightRGB, g_diffRed, g_diffGreen, g_diffBlue);
+    });
+
+    const diffRedSlider = document.getElementById("diffRedSlider");
+    if (!diffRedSlider) {
+        console.log('Failed to retrieve the diffRedSlider element');
+        return;
+    }
+    diffRedSlider.addEventListener("mousemove", function() { 
+        g_diffRed = Number(this.value);  
+        gl.uniform3f(u_LightRGB, g_diffRed, g_diffGreen, g_diffBlue);
+    });
+
+    const diffGreenSlider = document.getElementById("diffGreenSlider");
+    if (!diffGreenSlider) {
+        console.log('Failed to retrieve the diffGreenSlider element');
+        return;
+    }
+    diffGreenSlider.addEventListener("mousemove", function() { 
+        g_diffGreen = Number(this.value);  
+        gl.uniform3f(u_LightRGB, g_diffRed, g_diffGreen, g_diffBlue);
+    });
 }
 
 function click() {
@@ -482,7 +715,13 @@ function updateAllObjects() {
     g_camera.update();
     gl.uniformMatrix4fv(u_ProjectionMatrix, false, g_camera.projMatrix.elements);
     gl.uniformMatrix4fv(u_ViewMatrix, false, g_camera.viewMatrix.elements);
-    
+    var secVal = g_secondsPassed;
+    var lightX = Number(g_lightX) + 40.0 * Math.cos(secVal);
+    var lightZ = Number(g_lightZ) + 40.0 * Math.sin(secVal);
+    gl.uniform3f(u_LightPos, lightX, g_lightY, lightZ);
+    g_light.matrix.setTranslate(lightX - 0.25, g_lightY -0.25, lightZ - 0.25);
+    g_light.matrix.scale(0.5,0.5,0.5);
+
     var len = g_objList.length;
     //console.log("Num Shapes " + len);
     for (var i = 0; i < len; i++)  {

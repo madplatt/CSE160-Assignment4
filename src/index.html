@@ -2,30 +2,48 @@
 <html lang="en">
     <head>
         <meta charset="utf-8" />
-        <title>Max's Blocky World</title>
+        <title>Max's Lighted Blocky World</title>
     </head>
 
     <body onload="main()">
         <div class="intro">
             <b>Max Platt</b> <br>
             <b>madplatt@ucsc.edu</b> <br> <br>
-            <b>Notes to Grader: Click canvas for mouse capture/control, uses MDN pointer lock API, may not function on Safari. </b> <br> <br>
+            <b>Notes to Grader: Click canvas for mouse capture/control, uses MDN pointer lock API, may not function on Safari. <br>
+            Point light is small yellow cube, orbiting above maze. Cheats enabled by default for vertical movement. No spotlight. <br>
+            Diffuse Red/Blue/Green sliders adjust the color of diffuse light, specular is always white. Debug Textures show normals.</b> <br> <br>
             <b>Try to find the hidden diamonds inside the maze ruins! Toggle on cheats to enable vertical movement and <br> block 
                 breaking/placement within the maze. Click to break/place blocks with cheats enabled. <br> <br>
             </b>
         </div>
-        <canvas id="webgl" width="800" height="800">
+        <canvas id="webgl" width="400" height="400">
             Please use the browser supporting "canvas".
         </canvas>
         <br> <br>
-        <input type="button" id="toggleButton" value="Toggle Cheats" size="20" />
+        <input type="button" id="toggleCheats" value="Toggle Cheats" size="20" />
+        <input type="button" id="toggleLights" value="Toggle Lighting" size="20" />
+        <input type="button" id="toggleNorms" value="Toggle Debug Textures" size="20" />
         <br>
+        <label for="lightXSlider">Light X: </label>
+        <input type="range" id="lightXSlider" name="lightX" min="20.0" max="65.0" value="20.0" step=".1"/>
+        <label for="lightYSlider">Light Y: </label>
+        <input type="range" id="lightYSlider" name="lightY" min="45.0" max="90.0" value="45.0" step=".1"/>
+        <label for="lightZSlider">Light Z: </label>
+        <input type="range" id="lightZSlider" name="lightZ" min="10.0" max="55.0" value="10.0" step=".1"/>
+        <br>
+        <label for="diffRedSlider">Diffuse Red: </label>
+        <input type="range" id="diffRedSlider" name="lightR" min="0.0" max="1.0" value="1.0" step=".01"/>
+        <label for="diffGreenSlider">Diffuse Green: </label>
+        <input type="range" id="diffGreenSlider" name="lightG" min="0.0" max="1.0" value="1.0" step=".01"/>
+        <label for="diffBlueSlider">Diffuse Blue: </label>
+        <input type="range" id="diffBlueSlider" name="lightB" min="0.0" max="1.0" value="1.0" step=".01"/>
         <script src="../lib/webgl-utils.js"></script>
         <script src="../lib/webgl-debug.js"></script>
         <script src="../lib/cuon-utils.js"></script>
         <script src="../lib/cuon-matrix-cse160.js"></script>
         <script src="BlockWorld.js"></script>
         <script src="Cube.js"></script>
+        <script src="Sphere.js"></script>
         <script src="Camera.js"></script>
 
     </body>

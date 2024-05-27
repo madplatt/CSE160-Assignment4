@@ -18,8 +18,9 @@ class Camera {
         var eye = this.eye.elements;
         var at = this.at.elements;
         var up = this.up.elements;
-        console.log("Eye: " + eye + "   At: " + at);
+        //console.log("Eye: " + eye + "   At: " + at);
         this.viewMatrix.setLookAt(eye[0],eye[1],eye[2], at[0],at[1],at[2], up[0],up[1],up[2]);
+        gl.uniform3f(u_CameraPos, eye[0], eye[1], eye[2]);
     }
     getProjectionMatrix()
     {
